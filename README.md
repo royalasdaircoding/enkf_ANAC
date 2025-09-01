@@ -19,3 +19,6 @@ conda env create -f environment.yml -n your-env-name
 
 2. Activate the Environment
 conda activate your-env-name
+
+## Basic useage
+A basic example is provided in the ```EnkF_ANAC_github.ipynb``` notebook. 
