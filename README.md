@@ -21,6 +21,7 @@ conda env create -f environment.yml -n your-env-name
 conda activate your-env-name
 
 3. You will also require the local copy of the ```filterpy``` code.
-4. 
+
+
 ## Basic useage
 A basic example is provided in the ```EnkF_ANAC_github.ipynb``` notebook. 
