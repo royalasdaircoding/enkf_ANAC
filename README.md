@@ -6,16 +6,16 @@ Miniconda
  or Anaconda
  installed
 
-Python (version specified in environment.yml)
+Python (version specified in ```environment.yml```)
 
 ## Installation Steps
 
 1. Create the Conda Environment
-conda env create -f environment.yml
+```conda env create -f environment.yml```
 
 If you'd like to use a different environment name:
 
-conda env create -f environment.yml -n your-env-name
+```conda env create -f environment.yml -n your-env-name```
 
 2. Activate the Environment
 conda activate your-env-name
