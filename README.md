@@ -23,5 +23,5 @@ conda activate your-env-name
 3. You will also require the local copy of the ```filterpy``` code.
 
 
-## Basic useage
+## Basic usage
 A basic example is provided in the ```EnkF_ANAC_github.ipynb``` notebook. 
