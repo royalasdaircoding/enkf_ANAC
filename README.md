@@ -9,13 +9,14 @@ This project uses a Conda environment defined in environment.yml. Follow the ste
 
 Miniconda
  or Anaconda
+ or mamba
  installed
 
 Python (version specified in ```environment.yml```)
 
 ## Installation Steps
 
-1. Create the Conda Environment
+1. Create the Conda Environment using Anaconda or mamba 
 ```conda env create -f environment.yml```
 
 If you'd like to use a different environment name:
