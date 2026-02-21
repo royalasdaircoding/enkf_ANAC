@@ -5,6 +5,9 @@ If you are unsure on how Kalman Filters work, then I highly recommend reading th
 
 This project uses a Conda environment defined in environment.yml. Follow the steps below to install and activate it.
 
+## Pre-requisites
+If you are new to Python, you need to know how to set-up environments using either `pip` or `conda`. 
+
 ## Requirements:
 
 Miniconda
