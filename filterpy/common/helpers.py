@@ -382,8 +382,15 @@ def inv_diagonal(S):
         si[i, i] = 1.0 / S[i, i]
     return si
 
-
 def outer_product_sum(A, B=None):
+    if B is None:
+        B = A
+    A = np.ascontiguousarray(A, dtype=np.float64)
+    B = np.ascontiguousarray(B, dtype=np.float64)
+    return A.T @ B   # or np.dot(A.T, B)
+
+
+def outer_product_sum_old(A, B=None):
     r"""
     Computes the sum of the outer products of the rows in A and B
 

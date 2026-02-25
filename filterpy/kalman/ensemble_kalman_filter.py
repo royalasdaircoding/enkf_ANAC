@@ -27,7 +27,8 @@ from numpy import array, zeros, eye, dot
 #from numpy.random import multivariate_normal
 from filterpy.common import pretty_str, outer_product_sum
 from decimal import Decimal 
-from joblib import Parallel, delayed
+from scipy.linalg import solve 
+import warnings
 
 
 
@@ -74,8 +75,39 @@ class EnsembleKalmanFilter(object):
     fx : function fx(x, dt)
         State transition function. May be linear or nonlinear. Projects
         state x into the next time period. Returns the projected state x.
-
-
+        
+    inf: float
+         Multiplicative inflation factor on the ensemble members prior 
+         to assimilation
+         
+    gauss_kick: float
+        A uniform process noise adapted from previous CCFE code by Luca Spinnici.
+        This was included for comparison but is best avoided in favour of Q instead.
+    
+    ensemble_type: "gsn" or "uniform"
+        Specifies the prior ensemble member distributions to be drawn from either
+        Gaussian or uniform distributions
+        
+    constraints: numpy.array(2,dim_x)
+        Specify constraints for the ensemble members. The first row represents 
+        acceptable lower bounds and the second row represents the acceptable 
+        upper bounds of an ensemble member. If no constraints are to be specified
+        then the entry should be None. For example
+            np.array([[None, 10, None],[None, None, None]])
+        specifies an lower bound of 10 on the second state variable. 
+        
+        
+    qscales: numpy.array(dim_x)
+        A nonuniform version of gauss_kick. Again there is not much reason to use
+        this and instead specify Q. 
+        
+    inf_a: float 0<inf_a<1 
+        An inflation factor which acts to respread the posterior ensemble members
+        following assimilation. 
+        
+    seed: float
+        Random seed for numpy. 
+        
     Attributes
     ----------
     x : numpy.array(dim_x, 1)
@@ -159,7 +191,7 @@ class EnsembleKalmanFilter(object):
     """
 
     def __init__(self, x, P, dim_z, dt, N, hx, fx, inf=1, gauss_kick=None, ensemble_type="gsn", constraints=None, qscales=None, 
-    inf_a=None, seed=None):
+    inf_a=None, seed=None, vectorised=False):
         if dim_z <= 0:
             raise ValueError('dim_z must be greater than zero')
 
@@ -189,6 +221,7 @@ class EnsembleKalmanFilter(object):
         self.gauss_kick = gauss_kick
         self.constraints = constraints
         self.qscales = qscales
+        self.vectorised=vectorised
         # used to create error terms centered at 0 mean for
         # state and measurement
         
@@ -198,7 +231,11 @@ class EnsembleKalmanFilter(object):
         ## validate some input
         assert self.inf_a!=0, "inf_a should be non-zero. If you do not want analysis inflation set inf_a=None"
         
+        if self.gauss_kick is not None:
+            warnings.warn("gauss_kick is included for comparison to previous code. I would use process Q instead.")
+
         if self.qscales is not None:
+            warnings.warn("qscales is included for comparison to previous code. I would use process noise Q instead.")
             assert self.qscales.size==self.dim_x, "qscales must be dim_x size (zero entries can be specified)"
         
         if self.constraints is not None:
@@ -233,13 +270,14 @@ class EnsembleKalmanFilter(object):
         if self.ensemble_type == "gsn":
             self.sigmas = self._rng.multivariate_normal(mean=x, cov=P, size=self.N)
         elif self.ensemble_type == "uniform":
-            print("Uniform ensemble is legacy code from previous CCFE software")
+            warnings.warn("Uniform ensemble is legacy code from previous CCFE software. You should be careful about specifying a non-Gaussian prior ensemble.")
             uniform_ensemble = np.zeros((self.N, self.dim_x))
             for i in range(self.dim_x):
                 uniform_ensemble[:,i] = self._rng.uniform(high=P[i,i]+x[i], low=-P[i,i]+x[i], size=self.N)
             self.sigmas = uniform_ensemble
-    
-        #print(self.sigmas.shape)
+        else:
+            raise ValueError("ensemble_type must be gsn or uniform")
+
         self.x = x
         self.P = P
 
@@ -250,6 +288,8 @@ class EnsembleKalmanFilter(object):
         # these will always be a copy of x,P after update() is called
         self.x_post = self.x.copy()
         self.P_post = self.P.copy()
+
+
 
     def update(self, z, R=None):
         """
@@ -293,16 +333,17 @@ class EnsembleKalmanFilter(object):
             R = eye(self.dim_z) * R
 
         N = self.N
-        dim_z = len(z)
-        sigmas_h = zeros((N, dim_z))
+
 
         # transform sigma points into measurement space
         #inflation only works with a linear h in this definition
-        for i in range(N):
-            sigmas_h[i] = self.hx(self.sigmas[i])
+        #for i in range(N):
+        #    sigmas_h[i] = self.hx(self.sigmas[i])
+
+        sigmas_h = self.hx(self.sigmas)
 
         z_mean = np.mean(sigmas_h, axis=0)
-
+        
 
         P_zz = (outer_product_sum(self.inf*(sigmas_h - z_mean)) / (N-1)) + R #as self.hx applies a linear transform we multiply by self.inf here
         P_xz = outer_product_sum(
@@ -311,14 +352,19 @@ class EnsembleKalmanFilter(object):
         self.S = P_zz
         #self.SI = self.inv(self.S)
         #self.K = dot(P_xz, self.SI)
-        self.K = np.linalg.solve(self.S.T, P_xz.T).T #stable solve of the above problem
+        self.K = solve(self.S.T, P_xz.T, assume_a="pos").T #stable efficient solve making use of positive definite matrices
+        #self.K = np.linalg.solve(self.S.T, P_xz.T).T #stable solve of the above problem
         e_r = self._rng.multivariate_normal(self._mean_z, R, N) #mean z is a vector of zeros
 
+        ################# CAN BE VECTORIED
+        #for i in range(N):
+        #    self.sigmas[i] += dot(self.K, z + e_r[i] - sigmas_h[i])
         
-        for i in range(N):
-            self.sigmas[i] += dot(self.K, z + e_r[i] - sigmas_h[i])
-            
-        if self.inf_a is not None: #this hasn't been validated
+        ##### updated vectorised sigmas update
+        innov = z[None, :] + e_r - sigmas_h
+        self.sigmas += innov @ self.K.T 
+
+        if self.inf_a is not None: 
             self.sigmas = (1-self.inf_a)*self.sigmas + self.inf_a*self.sigma_prior
             
         if self.constraints is not None:
@@ -329,7 +375,7 @@ class EnsembleKalmanFilter(object):
         self.P = self.P - dot(dot(self.K, self.S), self.K.T)
 
         # save measurement and posterior state
-        self.z = deepcopy(z)
+        self.z = np.array(z, copy=True)
         self.x_post = self.x.copy()
         self.P_post = self.P.copy()
 
@@ -357,9 +403,12 @@ class EnsembleKalmanFilter(object):
             Priors between dt and dt_interval.
 
         """
-        if self.constraints is not None:
-            raise ValueError("predict_anaet is not compatible with naive constraints")
-        
+        #if self.constraints is not None:
+        #    raise ValueError("predict_anaet is not compatible with naive constraints")
+        if np.any(self.Q):
+            warnings.warn("Please ensure you only mean to add process noise on assimilation time-steps and" \
+            "not integration time-steps.")
+
         N = self.N
         
         
@@ -372,6 +421,7 @@ class EnsembleKalmanFilter(object):
         dtstr = Decimal(str(self.dt))
         nodecimals = np.abs(dtstr.as_tuple().exponent)
         trange=np.round(trange, nodecimals) #round to avoid numerical addition errors 
+        
         n_times = trange.shape[0]  
         if trange[-1]!=dt_interval:
             trange=np.append(trange, dt_interval)
@@ -379,15 +429,20 @@ class EnsembleKalmanFilter(object):
         n_times = int(dt_interval/self.dt) 
         solns = np.zeros((self.N, n_times, self.x.shape[0]))
         
+        if trange[-1]!=dt_interval:
+            raise ValueError("Inconsitent time interval does not end at assimilation time-step")
 
         for i, s in enumerate(self.sigmas): #could possibly speed up by vectorising this bit of code (will not work with numbalsoda)
            solns[i,:,:] = self.fx(s, self.dt, dt_interval, trange)
            self.sigmas[i] = solns[i,-1,:]
         
-        #process noise not compatible with this style of prediction step right now
+        #Assumes that Q is specified for assimilation time-steps
         e = self._rng.multivariate_normal(self._mean, self.Q, N)
         self.sigmas += e
-        
+    
+        #check the constraints are valid
+        if self.constraints is not None:
+            self.constrain()
         
         self.x = np.mean(self.sigmas, axis=0)
         self.P = outer_product_sum(self.sigmas - self.x) / (N - 1)
@@ -406,6 +461,66 @@ class EnsembleKalmanFilter(object):
 
         return means, priors 
     
+
+
+    def predict_assimilation_steps(self, dt_assim):
+        """
+        Function to perform faster integration of the ANAET model over the assimilation intverval.
+        This is NOT compatible with process noise added on integration time-steps. If you wish to use 
+        process noise on integration time-steps you must use the normal predict attribute. Admittedly this is much 
+        slower and you may need to develop another integration method in this instance 
+        
+        Note we are storing solutions from the next integration step (dt) and returning values up to the next
+        assimilation forecast step (dt_interval). t=0 is NOT stored as this counts as the previous assimilation step. 
+        
+        Parameters
+        ----------
+        dt_assim : float
+            Size of the time-step between assimilations.
+            
+
+        Returns
+        -------
+        means : np.array (n_times, dim_x)
+            Means of the enkf method between next integration step (dt) and the assimilation point (dt_interval).
+        priors : np.array (n_times, dim_x, dim_x)
+            Priors between dt and dt_interval.
+
+        """
+        #this could be changed to be true 
+        if self.constraints is not None:
+            raise ValueError("predict_anaet is not compatible with naive constraints")
+        if np.any(self.Q):
+            warnings.warn("Please ensure you only mean to add process noise on assimilation time-steps and" \
+            "not integration time-steps.")
+
+        N = self.N
+        trange = np.array([i*self.dt for i in range(int(dt_assim/self.dt))])
+
+        #if the interval is short then it could make an empty arrray
+        if np.size(trange)==0:
+            trange = np.array([0])
+
+        if trange[-1]!=dt_assim:
+            trange= np.append(trange, dt_assim)
+        
+        for i, s in enumerate(self.sigmas): #could possibly speed up by vectorising this bit of code (will not work with numbalsoda)
+           self.sigmas[i] = self.fx(s, self.dt, dt_assim, trange)[-1,:]
+
+        
+        #Assumes that Q is specified for assimilation time-steps
+        e = self._rng.multivariate_normal(self._mean, self.Q, N)
+        self.sigmas += e
+        
+        
+        self.x = np.mean(self.sigmas, axis=0)
+        self.P = outer_product_sum(self.sigmas - self.x) / (N - 1)
+        self.P_prior = np.copy(self.P)
+            
+        
+        # save prior
+        self.x_prior = np.copy(self.x)      
+        
 
     
     def constrain(self):
@@ -433,12 +548,16 @@ class EnsembleKalmanFilter(object):
         evolve the models forward in parallel 
         
         """
-        for i, s in enumerate(self.sigmas): #could possibly speed up by vectorising this bit of code (hard to generalise for all functions)
-            self.sigmas[i] = self.fx(s, self.dt)
-        
+        if not self.vectorised:
+            for i, s in enumerate(self.sigmas): #could possibly speed up by vectorising this bit of code (hard to generalise for all functions)
+                self.sigmas[i] = self.fx(s, self.dt)
+        elif self.vectorised: 
+            self.sigmas = self.fx(self.sigmas, self.dt)
         
         
         e = self._rng.multivariate_normal(self._mean, self.Q, N)
+
+        #if you only want process noise on assimilation time-steps 
         if assim:
             self.sigmas += e
         
