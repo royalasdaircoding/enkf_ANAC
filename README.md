@@ -17,7 +17,7 @@ Miniconda
 
 Python (version specified in ```environment.yml```)
 
-## Installation Steps
+## Installation Steps (Conda) 
 
 1. Create the Conda Environment using Anaconda or mamba 
 ```conda env create -f environment.yml```
@@ -31,6 +31,16 @@ conda activate your-env-name
 
 3. You will also require the local copy of the ```filterpy``` code.
 
+---------------------------------------------
+## Installation steps (pip) 
+First create a virtual environment in Python
+```python -m venv venv```
+Activate the environment (Linux) 
+```source venv/bin/activate```
+Activate the environment (Windows)
+```venv\Scripts\activate```
+Install the depencies using `pip`
+```pip install -r requirements.txt```
 
 ## Basic usage
 A basic example is provided in the ```EnkF_ANAC_github.ipynb``` notebook. 
