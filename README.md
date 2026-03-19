@@ -19,7 +19,8 @@ Python (version specified in ```environment.yml```)
 
 ## Installation Steps (Conda) 
 
-1. Create the Conda Environment using Anaconda or mamba 
+1. Create the Conda Environment using Anaconda or mamba
+   
 ```conda env create -f environment.yml```
 
 If you'd like to use a different environment name:
@@ -33,13 +34,20 @@ conda activate your-env-name
 
 ---------------------------------------------
 ## Installation steps (pip) 
-First create a virtual environment in Python
+1. First create a virtual environment in Python
+
 ```python -m venv venv```
-Activate the environment (Linux) 
+
+2. Activate the environment (Linux) 
+
 ```source venv/bin/activate```
-Activate the environment (Windows)
+
+2. Activate the environment (Windows)
+
 ```venv\Scripts\activate```
-Install the depencies using `pip`
+
+3. Install the depencies using `pip`
+
 ```pip install -r requirements.txt```
 
 ## Basic usage
