@@ -3,7 +3,7 @@ This respository contains code which is adapted from https://github.com/rlabbe/f
 
 If you are unsure on how Kalman Filters work, then I highly recommend reading the guide https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python/ for a hands-on discussion of using data assimilation in Python. `filterpy` has many other data assimilation routines that I have not implemented here. 
 
-This project uses a Conda environment defined in environment.yml. Follow the steps below to install and activate it.
+This project uses a Conda environment defined in environment.yml. Follow the steps below to install and activate it. You can also install using pip. 
 
 ## Pre-requisites
 If you are new to Python, you need to know how to set-up environments using either `pip` or `conda`. 
